@@ -1,2 +1,3 @@
 module
-import all HelloWorld.Basic
+public import HelloWorld.BaseLang
+public import HelloWorld.CheckedLang
