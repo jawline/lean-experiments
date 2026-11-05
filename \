@@ -1,0 +1,10 @@
+import HelloWorld
+
+
+def double (n : Nat) : Nat := n + n
+def incr (n : Nat) : Nat := n + 1
+
+def double_if_pow2 (n:Nat) : Nat := n.popcount() = 1
+
+def main : IO Unit :=
+  IO.println s!"Hello, {hello} {incr 5} {double 5}!"
