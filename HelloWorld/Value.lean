@@ -56,14 +56,6 @@ public def binOp {t : ValueTag}
     : Value t :=
   select_implementation t h lhs rhs
 
-public theorem ArithmeticBinOp.implementation_add_comm_i32 (a b : Value .i32)
-    : ArithmeticBinOp.implementation .add .i32 (by decide) a b
-      = ArithmeticBinOp.implementation .add .i32 (by decide) b a := by
-  cases a with
-  | i32Val x =>
-      cases b with
-      | i32Val y =>
-          simp [ArithmeticBinOp.implementation, Int32.add_comm]
 
 public def ArithmeticBinOp.is_commutative (op : ArithmeticBinOp) (tag : ValueTag)
     : Prop :=
@@ -81,22 +73,26 @@ public theorem ArithmeticBinOp.is_commutative_i32_correct (op : ArithmeticBinOp)
       | false => ¬ ArithmeticBinOp.is_commutative op .i32 := by
   cases op with
   | add =>
-      intro h a b
-      exact ArithmeticBinOp.implementation_add_comm_i32 a b
+      intro (h : ValueTag.i32.is_arithmetic = true) (a : Value .i32) (b : Value .i32)
+      cases a with
+      | i32Val x =>
+          cases b with
+          | i32Val y =>
+              simp [ArithmeticBinOp.implementation, Int32.add_comm]
   | multiply =>
-      intro h a b
+      intro (h : ValueTag.i32.is_arithmetic = true) (a : Value .i32) (b : Value .i32)
       cases a with
       | i32Val x =>
           cases b with
           | i32Val y =>
               simp [ArithmeticBinOp.implementation, Int32.mul_comm]
   | subtract =>
-      intro h
-      have h' := h (by decide) (.i32Val 5) (.i32Val 3)
+      intro (h : ArithmeticBinOp.is_commutative .subtract .i32)
+      have h' := h rfl (.i32Val 5) (.i32Val 3)
       simp [ArithmeticBinOp.implementation] at h'
   | divide =>
-      intro h
-      have h' := h (by decide) (.i32Val 6) (.i32Val 3)
+      intro (h : ArithmeticBinOp.is_commutative .divide .i32)
+      have h' := h rfl (.i32Val 6) (.i32Val 3)
       simp [ArithmeticBinOp.implementation] at h'
 
 end Value
