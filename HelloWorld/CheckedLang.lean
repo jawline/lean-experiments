@@ -1,14 +1,16 @@
 module
 
+public import HelloWorld.Value
 import HelloWorld.BaseLang
 import Aesop
 
+open Value
 open BaseLang
 
 namespace CheckedLang
 
 -- A TypeChecked BaseLang.Expr
-inductive CheckedExpr : BaseLang.ValueTag → Type where
+inductive CheckedExpr : ValueTag → Type where
   | atom (val : Value) : CheckedExpr val.tag
   | add {tag : ValueTag} (lhs : CheckedExpr tag) (rhs : CheckedExpr tag) (h : tag.is_arithmetic = true) : CheckedExpr tag
   | sub {tag : ValueTag} (lhs : CheckedExpr tag) (rhs : CheckedExpr tag) (h : tag.is_arithmetic = true) : CheckedExpr tag
