@@ -6,6 +6,10 @@ defaultTargets = ["helloworld"]
 name = "mathlib"
 scope = "leanprover-community"
 
+[[require]]
+name = "leanfmt"
+scope = "duckki"
+
 [[lean_lib]]
 name = "HelloWorld"
 

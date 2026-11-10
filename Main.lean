@@ -9,4 +9,3 @@ def poutl (n : String) := IO.println (outl n)
 
 def main : IO Unit := do
   poutl s!"Compute"
-
