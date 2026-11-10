@@ -7,30 +7,50 @@ namespace Value
 
 public inductive ValueTag where
   | unit
-  | i32 
+  | i32
   | f32
   | bool deriving DecidableEq
 
 public def ValueTag.is_arithmetic : ValueTag → Bool
-  | .unit 
-  | .i32   
+  | .unit
+  | .i32
   | .f32  => true
   | .bool => false
 
-public inductive Value : Tag → Type 
+public inductive Value : ValueTag → Type
   | unitVal : Value .unit
   | boolVal (val : Bool) : Value .bool
-  | i32Val (val : i32) : Value .i32
+  | i32Val (val : Int32) : Value .i32
   | f32Val (val : Float32) : Value .f32
 
-public def add {t : Tag} (lhs : Value t) (rhs : Value t) (h : t.is_arithmetic) : Value t :=
-  match h, t, lhs, rhs with
-  | _, .unit, _, _ => .unitVal
-  | _, .i32, .i32Val l, .i32Val r => .i32Val(l + r)
-  | _, .f32, .f32Val l, .f32Val r => .f32Val(l + r)
+
+public inductive ArithmeticBinOp where
+  | add
+  | subtract
+  | multiply
+  | divide
+
+public def ArithmeticBinOp.implementation (op : ArithmeticBinOp) :
+    (tag : ValueTag) → tag.is_arithmetic = true → Value tag → Value tag → Value tag
+  | .unit, _, _, _ => .unitVal
+  | .i32, _, .i32Val a, .i32Val b =>
+      .i32Val (match op with
+        | .add => a + b
+        | .subtract => a - b
+        | .multiply => a * b
+        | .divide => a / b)
+  | .f32, _, .f32Val a, .f32Val b =>
+      .f32Val (match op with
+        | .add => a + b
+        | .subtract => a - b
+        | .multiply => a * b
+        | .divide => a / b)
+  | .bool, h, _, _ => nomatch h
 
 
-public abbrev sameType (lhs : Value) (rhs : Value) : Prop := lhs.tag = rhs.tag
-public abbrev isArithmetic (lhs : Value) : Prop := (lhs.tag).is_arithmetic
- 
+public def binOp {t : ValueTag}
+    (select_implementation : (tag : ValueTag) → tag.is_arithmetic = true → Value tag → Value tag → Value tag)
+    (lhs : Value t) (rhs : Value t) (h : t.is_arithmetic = true) : Value t :=
+  select_implementation t h lhs rhs 
+
 end Value

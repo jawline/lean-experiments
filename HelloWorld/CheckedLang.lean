@@ -11,9 +11,8 @@ namespace CheckedLang
 
 -- A TypeChecked BaseLang.Expr
 inductive CheckedExpr : ValueTag → Type where
-  | atom (val : Value) : CheckedExpr val.tag
-  | add {tag : ValueTag} (lhs : CheckedExpr tag) (rhs : CheckedExpr tag) (h : tag.is_arithmetic = true) : CheckedExpr tag
-  | sub {tag : ValueTag} (lhs : CheckedExpr tag) (rhs : CheckedExpr tag) (h : tag.is_arithmetic = true) : CheckedExpr tag
+  | atom {tag : ValueTag } (val : Value tag) : CheckedExpr tag
+  | arithmeticBinOp {tag : ValueTag} (op : ArithmeticBinOp) (lhs : CheckedExpr tag) (rhs : CheckedExpr tag) (h : tag.is_arithmetic = true) : CheckedExpr tag
 
 
 structure TypedExpr where
@@ -34,34 +33,26 @@ abbrev ArithCtor :=
   {tag : ValueTag} →
   CheckedExpr tag → CheckedExpr tag → tag.is_arithmetic = true → CheckedExpr tag
 
-def constructArithmetic (mk : ArithCtor) (lhs rhs : TypedExpr) :
+def constructArithmetic (op : ArithmeticBinOp) (lhs rhs : TypedExpr) :
     Except String TypedExpr := do
   let ⟨lt, le⟩ := lhs
   let ⟨rt, re⟩ := rhs
   let ⟨h, q⟩ ← ensureArithmetic lt rt
-  return ⟨lt, mk le (h.symm ▸ re) q⟩
+  return ⟨lt, .arithmeticBinOp op le (h.symm ▸ re) q⟩
 
 def typecheck : Expr → Except String TypedExpr
-  | .atom val => Except.ok (⟨val.tag, .atom val⟩)
+  | .atom (tag := tag) val => Except.ok (⟨tag, .atom val⟩)
   | .add lhs rhs => do
-    constructArithmetic CheckedExpr.add (← typecheck lhs) (← typecheck rhs)
+    constructArithmetic  (.add) (← typecheck lhs) (← typecheck rhs)
   | .sub lhs rhs => do
-    constructArithmetic CheckedExpr.sub (← typecheck lhs) (← typecheck rhs)
+    constructArithmetic (.subtract) (← typecheck lhs) (← typecheck rhs)
 
-def binOp (fi : Int32 → Int32 → Int32) (ff : Float32 → Float32 → Float32) :
-    Value → Value → Value
-  | .unit, .unit => .unit
-  | .i32 a, .i32 b => .i32 (fi a b)
-  | .f32 a, .f32 b => .f32 (ff a b)
-  | _, _ => .unit
-
-def evalChecked : {tag : ValueTag} → CheckedExpr tag → Value
+def evalChecked : {tag : ValueTag} → CheckedExpr tag → Value tag
   | _, .atom val => val
-  | _, .add lhs rhs _ => binOp (· + ·) (· + ·) (evalChecked lhs) (evalChecked rhs)
-  | _, .sub lhs rhs _ => binOp (· - ·) (· - ·) (evalChecked lhs) (evalChecked rhs)
+  | _, .arithmeticBinOp op lhs rhs is_arithmetic => Value.binOp (ArithmeticBinOp.implementation op) (evalChecked lhs) (evalChecked rhs) is_arithmetic
   
 
-def eval (k : TypedExpr) : Value :=
+def eval (k : TypedExpr) : Value k.tag :=
   evalChecked k.expr
 
 end CheckedLang 

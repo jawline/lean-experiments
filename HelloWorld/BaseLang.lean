@@ -9,7 +9,7 @@ open Value
 namespace BaseLang
 
 public inductive Expr where
-  | atom (val : Value)
+  | atom {tag : ValueTag} (val : Value tag)
   | add (lhs : Expr) (rhs : Expr)
   | sub (lhs : Expr) (rhs : Expr)
 
