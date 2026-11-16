@@ -12,7 +12,7 @@ public inductive ValueTag where
   | bool
 deriving DecidableEq
 
-public def ValueTag.is_arithmetic : ValueTag → Bool
+@[expose] public def ValueTag.is_arithmetic : ValueTag → Bool
   | .unit
   | .i32
   | .f32 => true

@@ -1,6 +1,8 @@
 module
 
 public import HelloWorld.Value
+public import HelloWorld.BinOp
+public import HelloWorld.Comparison
 
 import HelloWorld.BaseLang
 import Aesop
@@ -43,10 +45,13 @@ def constructArithmetic (op : ArithmeticBinOp) (lhs rhs : TypedExpr)
 
 def typecheck : Expr → Except String TypedExpr
   | .atom (tag := tag) val => Except.ok (⟨tag, .atom val⟩)
-  | .add lhs rhs => do
-      constructArithmetic (.add) (← typecheck lhs) (← typecheck rhs)
-  | .sub lhs rhs => do
-      constructArithmetic (.subtract) (← typecheck lhs) (← typecheck rhs)
+  | .binOp op lhs rhs => do
+      constructArithmetic op (← typecheck lhs) (← typecheck rhs)
+  | .allocate _ => sorry
+  | .deallocate _ => sorry
+  | .get _ => sorry
+  | .set _ _ => sorry
+  | .branch _ _ _ => sorry
 
 def evalChecked : {tag : ValueTag} → CheckedExpr tag → Value tag
   | _, .atom val => val

@@ -4,6 +4,8 @@ import Mathlib.Data.Nat.Bits
 import Aesop
 
 public import HelloWorld.Value
+public import HelloWorld.BinOp
+public import HelloWorld.Comparison
 
 open Value
 
