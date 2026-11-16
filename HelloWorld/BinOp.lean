@@ -13,8 +13,14 @@ public inductive ArithmeticBinOp where
   | multiply
   | divide
 
+@[expose] public def ArithmeticBinOp.is_legal_operation_for_type (_op : ArithmeticBinOp)
+    (tag : ValueTag) : Bool :=
+  match tag with
+  | .unit | .i32 | .f32 => true
+  | .bool => false
+
 public def ArithmeticBinOp.implementation (op : ArithmeticBinOp)
-    : (tag : ValueTag) → tag.is_arithmetic = true → Value tag → Value tag → Value tag
+    : (tag : ValueTag) → op.is_legal_operation_for_type tag = true → Value tag → Value tag → Value tag
   | .unit, _, _, _ => .unitVal
   | .i32, _, .i32Val a, .i32Val b =>
       .i32Val
@@ -32,17 +38,17 @@ public def ArithmeticBinOp.implementation (op : ArithmeticBinOp)
           | .divide => a / b)
   | .bool, h, _, _ => nomatch h
 
-public def binOp {t : ValueTag}
+public def binOp {t : ValueTag} (op : ArithmeticBinOp)
     (select_implementation
-      : (tag : ValueTag) → tag.is_arithmetic = true → Value tag → Value tag → Value tag)
-    (lhs : Value t) (rhs : Value t) (h : t.is_arithmetic = true)
+      : (tag : ValueTag) → op.is_legal_operation_for_type tag = true → Value tag → Value tag → Value tag)
+    (lhs : Value t) (rhs : Value t) (h : op.is_legal_operation_for_type t = true)
     : Value t :=
   select_implementation t h lhs rhs
 
 
 public def ArithmeticBinOp.is_commutative (op : ArithmeticBinOp) (tag : ValueTag)
     : Prop :=
-  ∀ (h : tag.is_arithmetic = true) (a b : Value tag),
+  ∀ (h : op.is_legal_operation_for_type tag = true) (a b : Value tag),
     ArithmeticBinOp.implementation op tag h a b
     = ArithmeticBinOp.implementation op tag h b a
 
@@ -56,14 +62,16 @@ public theorem ArithmeticBinOp.is_commutative_i32_correct (op : ArithmeticBinOp)
       | false => ¬ ArithmeticBinOp.is_commutative op .i32 := by
   cases op with
   | add =>
-      intro (h : ValueTag.i32.is_arithmetic = true) (a : Value .i32) (b : Value .i32)
+      intro (h : ArithmeticBinOp.is_legal_operation_for_type .add .i32 = true)
+        (a : Value .i32) (b : Value .i32)
       cases a with
       | i32Val x =>
           cases b with
           | i32Val y =>
               simp [ArithmeticBinOp.implementation, Int32.add_comm]
   | multiply =>
-      intro (h : ValueTag.i32.is_arithmetic = true) (a : Value .i32) (b : Value .i32)
+      intro (h : ArithmeticBinOp.is_legal_operation_for_type .multiply .i32 = true)
+        (a : Value .i32) (b : Value .i32)
       cases a with
       | i32Val x =>
           cases b with
