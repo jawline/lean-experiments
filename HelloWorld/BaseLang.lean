@@ -5,7 +5,6 @@ import Aesop
 
 public import HelloWorld.Value
 public import HelloWorld.BinOp
-public import HelloWorld.Comparison
 
 open Value
 
@@ -17,7 +16,8 @@ public inductive Expr where
   | deallocate (n : Nat)
   | get (n : Nat)
   | set (n : Nat) (e : Expr)
-  | binOp (op : ArithmeticBinOp) (lhs : Expr) (rhs : Expr)
+  | binOp (op : BinOp) (lhs : Expr) (rhs : Expr)
   | branch (cmp : Expr) (lhs : Expr) (rhs : Expr) 
+  | call (functionName : String) (arguments : list Expr)
 
 end BaseLang
