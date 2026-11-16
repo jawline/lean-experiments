@@ -18,6 +18,6 @@ public inductive Expr where
   | set (n : Nat) (e : Expr)
   | binOp (op : BinOp) (lhs : Expr) (rhs : Expr)
   | branch (cmp : Expr) (lhs : Expr) (rhs : Expr) 
-  | call (functionName : String) (arguments : list Expr)
+  | call (functionName : String) (arguments : List Expr)
 
 end BaseLang
