@@ -11,7 +11,11 @@ namespace BaseLang
 
 public inductive Expr where
   | atom {tag : ValueTag} (val : Value tag)
-  | add (lhs : Expr) (rhs : Expr)
-  | sub (lhs : Expr) (rhs : Expr)
+  | allocate (n : Nat)
+  | deallocate (n : Nat)
+  | get (n : Nat)
+  | set (n : Nat) (e : Expr)
+  | binOp (op : ArithmeticBinOp) (lhs : Expr) (rhs : Expr)
+  | branch (cmp : Expr) (lhs : Expr) (rhs : Expr) 
 
 end BaseLang
