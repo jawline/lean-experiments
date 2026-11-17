@@ -206,52 +206,16 @@ public structure EnvironmentWithImplementation (symbols : EnvironmentSymbols) wh
   h_slot : ∀ (i : Fin symbols.size),
     (implementations[i.val]'i.isLt).slot = i
 
-private structure AlignedImplementations (symbols : EnvironmentSymbols) (n : Nat)
-    (h_n : n ≤ symbols.size) where
-  implementations : Vector (CheckedImplementation symbols) n
-  h_slot : ∀ (i : Fin n),
-    (implementations[i.val]'i.isLt).slot =
-      ⟨i.val, Nat.lt_of_lt_of_le i.isLt h_n⟩
-
-private def buildAlignedImplementations (symbols : EnvironmentSymbols) (bodies : Array Expr)
-    (h_size : bodies.size = symbols.size) :
-    (n : Nat) → (h_n : n ≤ symbols.size) →
-      Except String (AlignedImplementations symbols n h_n)
-  | 0, _h_n => Except.ok
-      { implementations := Vector.mk #[] rfl
-        h_slot := by intro i; exact i.elim0 }
-  | n + 1, h_n => do
-      let prev ← buildAlignedImplementations symbols bodies h_size n
-        (Nat.le_of_succ_le h_n)
-      let hn : n < symbols.size := Nat.lt_of_succ_le h_n
-      let slot : Fin symbols.size := ⟨n, hn⟩
-      let body := bodies[n]'(by simpa [h_size] using hn)
-      let checked ← typecheckFunction symbols (symbols.get slot).2 body
-      let implementation : CheckedImplementation symbols := ⟨slot, checked⟩
-      let implementations := prev.implementations.push implementation
-      return ({
-        implementations := implementations
-        h_slot := by
-          intro i
-          by_cases hi : i.val < n
-          · have hget : (implementations[i.val]'i.isLt) =
-                prev.implementations[i.val]'hi := by
-              simp [implementations, Vector.getElem_push_lt, hi]
-            rw [hget]
-            have hprev := prev.h_slot ⟨i.val, hi⟩
-            rw [hprev]
-          · obtain ⟨iv, hiv⟩ := i
-            have hival : iv = n := Nat.eq_of_lt_succ_of_not_lt hiv hi
-            have hget : (implementations[iv]'hiv) = implementation := by
-              subst hival
-              simp [implementations, Vector.getElem_push_eq]
-            rw [hget]
-            apply Fin.ext
-            exact hival.symm
-      } : AlignedImplementations symbols (n + 1) h_n)
+private def buildCheckedImplementation (symbols : EnvironmentSymbols) (bodies : Array Expr)
+    (h_size : bodies.size = symbols.size) (slot : Fin symbols.size) :
+    Except String { impl : CheckedImplementation symbols // impl.slot = slot } := do
+  let body := bodies[slot.val]'(by simp [h_size])
+  let checked ← typecheckFunction symbols (symbols.get slot).2 body
+  return ⟨⟨slot, checked⟩, rfl⟩
 
 private def AlignedImplementations.toEnvironment {symbols : EnvironmentSymbols}
-    (aligned : AlignedImplementations symbols symbols.size (Nat.le_refl _)) :
+    (aligned : AlignedImplementations symbols (CheckedImplementation symbols)
+      (fun impl => impl.slot) symbols.size (Nat.le_refl _)) :
     EnvironmentWithImplementation symbols :=
   { implementations := aligned.implementations
     h_slot := by
@@ -268,7 +232,10 @@ public def EnvironmentWithImplementation.get {symbols : EnvironmentSymbols}
 
 public def EnvironmentWithImplementation.build (symbols : EnvironmentSymbols) (bodies : Array Expr)
     (h_size : bodies.size = symbols.size) : Except String (EnvironmentWithImplementation symbols) := do
-  let aligned ← buildAlignedImplementations symbols bodies h_size symbols.size (Nat.le_refl _)
+  let aligned ← buildAlignedImplementations
+    (fun impl : CheckedImplementation symbols => impl.slot)
+    (buildCheckedImplementation symbols bodies h_size)
+    symbols.size (Nat.le_refl _)
   return aligned.toEnvironment
 
 mutual
