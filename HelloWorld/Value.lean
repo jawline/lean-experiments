@@ -6,7 +6,7 @@ import Aesop
 namespace Value
 
 public inductive ValueTag where
-  | empty
+  | undefined
   | unit
   | i32
   | f32

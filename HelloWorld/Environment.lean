@@ -26,14 +26,4 @@ public structure FunctionReference (symbols : EnvironmentSymbols) where
   debug_name : String
   function_slot : Fin symbols.size
 
-@[expose] public def listGet? {α : Type} : List α → Nat → Option α
-  | [], _ => none
-  | x :: _, 0 => some x
-  | _ :: xs, n + 1 => listGet? xs n
-
-@[expose] public def listSet? {α : Type} : List α → Nat → α → Option (List α)
-  | [], _, _ => none
-  | _ :: xs, 0, v => some (v :: xs)
-  | x :: xs, n + 1, v => (listSet? xs n v).map (x :: ·)
-
 end CheckedLang

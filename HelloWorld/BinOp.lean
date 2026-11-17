@@ -17,7 +17,7 @@ public inductive ArithmeticBinOp where
     (tag : ValueTag) : Bool :=
   match tag with
   | .unit | .i32 | .f32 => true
-  | .empty | .bool => false
+  | .undefined | .bool => false
 
 public def ArithmeticBinOp.implementation (op : ArithmeticBinOp)
     : (tag : ValueTag) → op.is_legal_operation_for_type tag = true → Value tag → Value tag → Value tag
@@ -36,7 +36,7 @@ public def ArithmeticBinOp.implementation (op : ArithmeticBinOp)
           | .subtract => a - b
           | .multiply => a * b
           | .divide => a / b)
-  | .empty, h, _, _ => nomatch h
+  | .undefined, h, _, _ => nomatch h
   | .bool, h, _, _ => nomatch h
 
 public def binOp {t : ValueTag} (op : ArithmeticBinOp)
@@ -95,7 +95,7 @@ public inductive ComparisonBinOp where
 
 @[expose] public def ComparisonBinOp.is_legal_operation_for_type (op : ComparisonBinOp) (tag : ValueTag) : Bool :=
   match tag with
-  | .empty | .unit => false
+  | .undefined | .unit => false
   | .bool =>
       match op with
       | .greater_than | .less_than => false
@@ -104,7 +104,7 @@ public inductive ComparisonBinOp where
 
 public def ComparisonBinOp.implementation (op : ComparisonBinOp)
     : (tag : ValueTag) → op.is_legal_operation_for_type tag = true → Value tag → Value tag → Value .bool
-  | .empty, h, _, _ => nomatch h
+  | .undefined, h, _, _ => nomatch h
   | .unit, h, _, _ => nomatch h
   | .bool, h, .boolVal a, .boolVal b =>
       match op with

@@ -10,113 +10,119 @@ namespace CheckedLang
 public abbrev StackCtx := List ValueTag
 
 public inductive Cell where
-  | empty : Cell
+  | undefined : Cell
   | value (tag : ValueTag) (v : Value tag) : Cell
 
 public def Cell.tag : Cell → ValueTag
-  | .empty => .empty
+  | .undefined => .undefined
   | .value tag _ => tag
+
+public def tagAgrees : Option ValueTag → Cell → Prop
+  | none, _ => False
+  | some tag, cell => tag = .undefined ∨ Cell.tag cell = tag
 
 public structure RuntimeStack (ctx : StackCtx) where
   cells : Array Cell
   top : Nat
   h_bounds : top + ctx.length ≤ cells.size
-  h_tags : ((cells.toList.drop top).take ctx.length).map Cell.tag = ctx
+  h_tags : ∀ (i : Nat), i < ctx.length →
+    ∃ cell, cells[top + i]? = some cell ∧ tagAgrees ctx[i]? cell
+
+public def RuntimeStack.slice {ctx : StackCtx} (stack : RuntimeStack ctx) : Array Cell :=
+  stack.cells.extract stack.top (stack.top + ctx.length)
+
+public theorem RuntimeStack.slice_length {ctx : StackCtx} (stack : RuntimeStack ctx) :
+    stack.slice.size = ctx.length := by
+  rw [RuntimeStack.slice, Array.size_extract]
+  have hmin : min (stack.top + ctx.length) stack.cells.size = stack.top + ctx.length :=
+    Nat.min_eq_left stack.h_bounds
+  rw [hmin]
+  omega
+
+public theorem RuntimeStack.slice_getElem? {ctx : StackCtx} (stack : RuntimeStack ctx)
+    {i : Nat} (hi : i < ctx.length) :
+    stack.slice[i]? = stack.cells[stack.top + i]? := by
+  rw [RuntimeStack.slice, Array.getElem?_extract]
+  have hmin : min (stack.top + ctx.length) stack.cells.size = stack.top + ctx.length :=
+    Nat.min_eq_left stack.h_bounds
+  rw [hmin]
+  have hsub : stack.top + ctx.length - stack.top = ctx.length := by omega
+  rw [hsub]
+  simp [hi]
 
 public def RuntimeStack.toCellList {ctx : StackCtx} (stack : RuntimeStack ctx) : List Cell :=
-  (stack.cells.toList.drop stack.top).take ctx.length
+  stack.slice.toList
 
 public theorem RuntimeStack.toCellList_length {ctx : StackCtx} (stack : RuntimeStack ctx) :
     stack.toCellList.length = ctx.length := by
-  simp only [RuntimeStack.toCellList, List.length_take, List.length_drop, Array.length_toList]
-  apply Nat.min_eq_left
-  have h : ctx.length + stack.top ≤ stack.cells.size := by
-    simpa [Nat.add_comm] using stack.h_bounds
-  exact Nat.le_sub_of_add_le h
-
-public theorem listGet?_eq_getElem? {α : Type} :
-    (xs : List α) → (n : Nat) → listGet? xs n = xs[n]?
-  | [], _ => rfl
-  | _ :: _, 0 => rfl
-  | _ :: xs, n + 1 => listGet?_eq_getElem? xs n
-
-public theorem listGet?_some_lt {α : Type} {xs : List α} {n : Nat} {x : α}
-    (h : listGet? xs n = some x) : n < xs.length := by
-  have h' : xs[n]? = some x := by
-    simpa [listGet?_eq_getElem?] using h
-  exact (List.getElem?_eq_some_iff.mp h').choose
-
-public theorem listSet?_some_lt {α : Type} {xs : List α} {n : Nat} {x : α} {xs' : List α}
-    (h : listSet? xs n x = some xs') : n < xs.length := by
-  induction xs generalizing n xs' with
-  | nil => simp [listSet?] at h
-  | cons y ys ih =>
-      cases n with
-      | zero => simp
-      | succ n =>
-          simp [listSet?] at h
-          rcases h with ⟨ys', hys', _⟩
-          exact Nat.succ_lt_succ (ih hys')
-
-public theorem listSet?_length {α : Type} {xs : List α} {n : Nat} {x : α} {xs' : List α}
-    (h : listSet? xs n x = some xs') : xs'.length = xs.length := by
-  induction xs generalizing n xs' with
-  | nil => simp [listSet?] at h
-  | cons y ys ih =>
-      cases n with
-      | zero =>
-          simp [listSet?] at h
-          subst xs'
-          simp
-      | succ n =>
-          simp [listSet?] at h
-          rcases h with ⟨ys', hys', hxs⟩
-          subst xs'
-          simp [ih hys']
-
-public theorem listSet?_eq_set {α : Type} {xs : List α} {n : Nat} {x : α} {xs' : List α}
-    (h : listSet? xs n x = some xs') : xs.set n x = xs' := by
-  induction xs generalizing n xs' with
-  | nil => simp [listSet?] at h
-  | cons y ys ih =>
-      cases n with
-      | zero =>
-          simp [listSet?] at h
-          subst xs'
-          rfl
-      | succ n =>
-          simp [listSet?] at h
-          rcases h with ⟨ys', hys', hxs⟩
-          subst xs'
-          simp [List.set, ih hys']
+  rw [RuntimeStack.toCellList, Array.length_toList, stack.slice_length]
 
 public def RuntimeStack.nil : RuntimeStack [] where
   cells := #[]
   top := 0
   h_bounds := by simp
-  h_tags := by simp
+  h_tags := by
+    intro i hi
+    simp at hi
 
-public def RuntimeStack.empty {ctx : StackCtx} (rest : RuntimeStack ctx) :
-    RuntimeStack (.empty :: ctx) where
-  cells := (Cell.empty :: rest.toCellList).toArray
+public def RuntimeStack.undefined {ctx : StackCtx} (rest : RuntimeStack ctx) :
+    RuntimeStack (.undefined :: ctx) where
+  cells := #[Cell.undefined] ++ rest.slice
   top := 0
   h_bounds := by
-    simp [RuntimeStack.toCellList_length]
+    simp [Array.size_append, rest.slice_length]
+    omega
   h_tags := by
-    simp [RuntimeStack.toCellList, Cell.tag, rest.h_tags]
+    intro i hi
+    cases i with
+    | zero =>
+        refine ⟨Cell.undefined, ?_, ?_⟩
+        · rw [Array.getElem?_append_left (by simp)]
+          simp
+        · simp [tagAgrees]
+    | succ j =>
+        have hj : j < ctx.length := by simpa using hi
+        obtain ⟨cell, hcell, htag⟩ := rest.h_tags j hj
+        have hcell' : rest.slice[j]? = some cell := by
+          rw [rest.slice_getElem? hj]
+          exact hcell
+        refine ⟨cell, ?_, ?_⟩
+        · rw [Array.getElem?_append_right]
+          · simpa using hcell'
+          · simp
+        · simpa using htag
 
 public def RuntimeStack.value {ctx : StackCtx} {tag : ValueTag} (v : Value tag)
     (rest : RuntimeStack ctx) : RuntimeStack (tag :: ctx) where
-  cells := (Cell.value tag v :: rest.toCellList).toArray
+  cells := #[Cell.value tag v] ++ rest.slice
   top := 0
   h_bounds := by
-    simp [RuntimeStack.toCellList_length]
+    simp [Array.size_append, rest.slice_length]
+    omega
   h_tags := by
-    simp [RuntimeStack.toCellList, Cell.tag, rest.h_tags]
+    intro i hi
+    cases i with
+    | zero =>
+        refine ⟨Cell.value tag v, ?_, ?_⟩
+        · rw [Array.getElem?_append_left (by simp)]
+          simp
+        · simp [tagAgrees, Cell.tag]
+    | succ j =>
+        have hj : j < ctx.length := by simpa using hi
+        obtain ⟨cell, hcell, htag⟩ := rest.h_tags j hj
+        have hcell' : rest.slice[j]? = some cell := by
+          rw [rest.slice_getElem? hj]
+          exact hcell
+        refine ⟨cell, ?_, ?_⟩
+        · rw [Array.getElem?_append_right]
+          · simpa using hcell'
+          · simp
+        · simpa using htag
 
 public theorem RuntimeStack.nonempty : (ctx : StackCtx) → Nonempty (RuntimeStack ctx)
   | [] => ⟨RuntimeStack.nil⟩
-  | .empty :: ctx => ⟨RuntimeStack.empty (Classical.choice (RuntimeStack.nonempty ctx))⟩
+  | .undefined :: ctx =>
+      ⟨RuntimeStack.undefined (Classical.choice (RuntimeStack.nonempty ctx))⟩
   | .unit :: ctx => ⟨RuntimeStack.value .unitVal (Classical.choice (RuntimeStack.nonempty ctx))⟩
   | .i32 :: ctx => ⟨RuntimeStack.value (.i32Val 0) (Classical.choice (RuntimeStack.nonempty ctx))⟩
   | .f32 :: ctx => ⟨RuntimeStack.value (.f32Val 0) (Classical.choice (RuntimeStack.nonempty ctx))⟩
@@ -126,67 +132,65 @@ public instance : (ctx : StackCtx) → Nonempty (RuntimeStack ctx) :=
   RuntimeStack.nonempty
 
 public def Cell.get {tag : ValueTag} (c : Cell) (h : Cell.tag c = tag)
-    (hne : tag ≠ .empty) : Value tag :=
+    (hne : tag ≠ .undefined) : Value tag :=
   match c with
-  | .empty =>
-      have h' : tag = .empty := by simpa [Cell.tag] using h.symm
+  | .undefined =>
+      have h' : tag = .undefined := by simpa [Cell.tag] using h.symm
       (hne h').elim
   | .value tag' v =>
       h ▸ v
 
 public def RuntimeStack.get {ctx : StackCtx} (stack : RuntimeStack ctx) (n : Nat)
-    (tag : ValueTag) (hget : listGet? ctx n = some tag) (hne : tag ≠ .empty) : Value tag :=
-  let hn : n < ctx.length := listGet?_some_lt hget
+    (tag : ValueTag) (hget : ctx[n]? = some tag) (hne : tag ≠ .undefined) : Value tag :=
+  let hn : n < ctx.length := (List.getElem?_eq_some_iff.mp hget).choose
   let hlt : stack.top + n < stack.cells.size := by
     have hbounds := stack.h_bounds
     omega
   let c := stack.cells[stack.top + n]'hlt
-  have htag : Cell.tag c = tag := by
-    have h := congrArg (fun l => l[n]?) stack.h_tags
-    change ((stack.toCellList.map Cell.tag)[n]?) = ctx[n]? at h
-    rw [List.getElem?_map] at h
-    have hslice_len : n < stack.toCellList.length := by
-      rw [stack.toCellList_length]
-      exact hn
-    rw [List.getElem?_eq_getElem hslice_len, Option.map_some] at h
-    have hget' : ctx[n]? = some tag := by
-      simpa [listGet?_eq_getElem?] using hget
-    rw [hget'] at h
-    have htag' : Cell.tag (stack.toCellList[n]'hslice_len) = tag := by
-      simpa using h
-    have hcell : stack.toCellList[n]'hslice_len = c := by
-      simp only [RuntimeStack.toCellList]
-      rw [List.getElem_take, List.getElem_drop]
-      exact Array.getElem_toList hlt
-    simpa [hcell] using htag'
-  Cell.get c htag hne
+  have hcell : Cell.tag c = tag := by
+    obtain ⟨cell, hcell, htag⟩ := stack.h_tags n hn
+    have hc : cell = c := by
+      have h1 : stack.cells[stack.top + n]? = some c := Array.getElem?_eq_getElem hlt
+      rw [h1] at hcell
+      exact (Option.some.inj hcell).symm
+    rw [hc] at htag
+    rw [hget] at htag
+    rcases htag with h | h
+    · exact (hne h).elim
+    · exact h
+  Cell.get c hcell hne
 
-public def RuntimeStack.set {ctx : StackCtx} (stack : RuntimeStack ctx) :
-    (n : Nat) → (tag : ValueTag) → (v : Value tag) →
-    (ctx' : StackCtx) → listSet? ctx n tag = some ctx' → RuntimeStack ctx' :=
-  fun n tag v ctx' hset =>
-    let hn : n < ctx.length := listSet?_some_lt hset
-    let hlt : stack.top + n < stack.cells.size := by
-      have hbounds := stack.h_bounds
-      omega
-    let newCell : Cell := .value tag v
-    let cells' := stack.cells.set (stack.top + n) newCell hlt
-    have h_bounds' : stack.top + ctx'.length ≤ cells'.size := by
-      rw [listSet?_length hset, Array.size_set hlt]
-      exact stack.h_bounds
-    have h_tags' : ((cells'.toList.drop stack.top).take ctx'.length).map Cell.tag = ctx' := by
-      rw [Array.toList_set stack.cells (stack.top + n) newCell hlt]
-      rw [List.drop_set]
-      have hnot : ¬ (stack.top + n < stack.top) := by omega
-      simp only [hnot, ite_false]
-      have hsub : stack.top + n - stack.top = n := by omega
-      rw [hsub, listSet?_length hset]
-      rw [List.take_set]
-      rw [List.map_set]
-      rw [stack.h_tags]
-      simp [newCell, Cell.tag]
-      rw [listSet?_eq_set hset]
-    ⟨cells', stack.top, h_bounds', h_tags'⟩
+public def RuntimeStack.set {ctx : StackCtx} (stack : RuntimeStack ctx) (n : Nat)
+    (tag : ValueTag) (v : Value tag) (hn : n < ctx.length) :
+    RuntimeStack (ctx.set n tag) :=
+  let hlt : stack.top + n < stack.cells.size := by
+    have hbounds := stack.h_bounds
+    omega
+  let newCell : Cell := .value tag v
+  let cells' := stack.cells.set (stack.top + n) newCell hlt
+  have h_bounds' : stack.top + (ctx.set n tag).length ≤ cells'.size := by
+    rw [List.length_set, Array.size_set hlt]
+    exact stack.h_bounds
+  have h_tags' : ∀ (i : Nat), i < (ctx.set n tag).length →
+      ∃ cell, cells'[stack.top + i]? = some cell ∧ tagAgrees (ctx.set n tag)[i]? cell := by
+    intro i hi
+    have hi_ctx : i < ctx.length := by simpa [List.length_set] using hi
+    by_cases hin : i = n
+    · subst hin
+      refine ⟨newCell, ?_, ?_⟩
+      · rw [Array.getElem?_set hlt]
+        simp
+      · rw [List.getElem?_set_self hn]
+        simp [tagAgrees, newCell, Cell.tag]
+    · obtain ⟨cell, hcell, htag⟩ := stack.h_tags i hi_ctx
+      have hni : n ≠ i := fun h => hin h.symm
+      refine ⟨cell, ?_, ?_⟩
+      · rw [Array.getElem?_set hlt]
+        simp [hni]
+        exact hcell
+      · rw [List.getElem?_set_ne hni]
+        exact htag
+  ⟨cells', stack.top, h_bounds', h_tags'⟩
 
 public def RuntimeStack.take {ctx : StackCtx} (n : Nat) (stack : RuntimeStack ctx) :
     RuntimeStack (ctx.take n) where
@@ -199,10 +203,21 @@ public def RuntimeStack.take {ctx : StackCtx} (n : Nat) (stack : RuntimeStack ct
       Nat.add_le_add_left hmin stack.top
     exact Nat.le_trans h stack.h_bounds
   h_tags := by
-    have h := congrArg (List.take n) stack.h_tags
-    rw [← List.map_take] at h
-    rw [List.take_take] at h
-    simpa [List.length_take] using h
+    intro i hi
+    have hi_ctx : i < ctx.length := by
+      have hlen : (ctx.take n).length = min n ctx.length := List.length_take
+      rw [hlen] at hi
+      omega
+    have hik : i < n := by
+      have hlen : (ctx.take n).length = min n ctx.length := List.length_take
+      rw [hlen] at hi
+      omega
+    obtain ⟨cell, hcell, htag⟩ := stack.h_tags i hi_ctx
+    refine ⟨cell, ?_, ?_⟩
+    · exact hcell
+    · rw [List.getElem?_take]
+      simp [hik]
+      exact htag
 
 public def RuntimeStack.drop {ctx : StackCtx} (stack : RuntimeStack ctx) (n : Nat)
     (hn : n ≤ ctx.length) : RuntimeStack (ctx.drop n) where
@@ -213,11 +228,18 @@ public def RuntimeStack.drop {ctx : StackCtx} (stack : RuntimeStack ctx) (n : Na
     have hbounds := stack.h_bounds
     omega
   h_tags := by
-    have h := congrArg (List.drop n) stack.h_tags
-    rw [← List.map_drop] at h
-    rw [List.drop_take] at h
-    rw [List.drop_drop] at h
-    simpa using h
+    intro i hi
+    have hi_ctx : n + i < ctx.length := by
+      have hlen : (ctx.drop n).length = ctx.length - n := List.length_drop
+      rw [hlen] at hi
+      omega
+    obtain ⟨cell, hcell, htag⟩ := stack.h_tags (n + i) hi_ctx
+    have hindex : stack.top + n + i = stack.top + (n + i) := by omega
+    refine ⟨cell, ?_, ?_⟩
+    · rw [hindex]
+      exact hcell
+    · rw [List.getElem?_drop]
+      exact htag
 
 public def RuntimeStack.deallocate {ctx : StackCtx} (stack : RuntimeStack ctx) (n : Nat)
     (hn : n ≤ ctx.length) : RuntimeStack (ctx.drop n) :=
@@ -225,23 +247,91 @@ public def RuntimeStack.deallocate {ctx : StackCtx} (stack : RuntimeStack ctx) (
 
 public def RuntimeStack.append {ctx1 ctx2 : StackCtx} (s1 : RuntimeStack ctx1)
     (s2 : RuntimeStack ctx2) : RuntimeStack (ctx1 ++ ctx2) where
-  cells := (s1.toCellList ++ s2.toCellList).toArray
+  cells := s1.slice ++ s2.slice
   top := 0
   h_bounds := by
-    simp [List.size_toArray, List.length_append, s1.toCellList_length, s2.toCellList_length]
+    simp [Array.size_append, s1.slice_length, s2.slice_length, List.length_append]
   h_tags := by
-    simp [RuntimeStack.toCellList, List.map_append, s1.h_tags, s2.h_tags]
-    rw [← List.length_append, List.take_length]
+    intro i hi
+    by_cases hi1 : i < ctx1.length
+    · obtain ⟨cell, hcell, htag⟩ := s1.h_tags i hi1
+      have hcell' : s1.slice[i]? = some cell := by
+        rw [s1.slice_getElem? hi1]
+        exact hcell
+      refine ⟨cell, ?_, ?_⟩
+      · rw [Array.getElem?_append_left]
+        · simpa using hcell'
+        · simpa [s1.slice_length] using hi1
+      · rw [List.getElem?_append_left hi1]
+        exact htag
+    · have hge : ctx1.length ≤ i := Nat.le_of_not_gt hi1
+      have hi2 : i - ctx1.length < ctx2.length := by
+        have hi_len : i < (ctx1 ++ ctx2).length := hi
+        rw [List.length_append] at hi_len
+        omega
+      obtain ⟨cell, hcell, htag⟩ := s2.h_tags (i - ctx1.length) hi2
+      have hcell' : s2.slice[i - ctx1.length]? = some cell := by
+        rw [s2.slice_getElem? hi2]
+        exact hcell
+      refine ⟨cell, ?_, ?_⟩
+      · rw [Array.getElem?_append_right]
+        · simpa [s1.slice_length] using hcell'
+        · simpa [s1.slice_length] using hge
+      · rw [List.getElem?_append_right hge]
+        exact htag
 
-public def RuntimeStack.emptyStack (n : Nat) :
-    RuntimeStack (List.replicate n ValueTag.empty) where
-  cells := (List.replicate n Cell.empty).toArray
+public def RuntimeStack.undefinedStack (n : Nat) :
+    RuntimeStack (List.replicate n ValueTag.undefined) where
+  cells := Array.replicate n Cell.undefined
   top := 0
   h_bounds := by simp
-  h_tags := by simp [Cell.tag]
+  h_tags := by
+    intro i hi
+    have hi' : i < n := by simpa using hi
+    refine ⟨Cell.undefined, ?_, ?_⟩
+    · rw [Array.getElem?_replicate]
+      simp [hi']
+    · rw [List.getElem?_replicate]
+      simp [hi', tagAgrees]
 
 public def RuntimeStack.allocate {ctx : StackCtx} (stack : RuntimeStack ctx) (n : Nat) :
-    RuntimeStack (List.replicate n ValueTag.empty ++ ctx) :=
-  RuntimeStack.append (RuntimeStack.emptyStack n) stack
+    RuntimeStack (List.replicate n ValueTag.undefined ++ ctx) :=
+  if h : n ≤ stack.top then
+    { cells := stack.cells
+      top := stack.top - n
+      h_bounds := by
+        rw [List.length_append, List.length_replicate]
+        have hbounds := stack.h_bounds
+        omega
+      h_tags := by
+        intro i hi
+        by_cases hin : i < n
+        · have hlt : stack.top - n + i < stack.cells.size := by
+            have hbounds := stack.h_bounds
+            omega
+          refine ⟨stack.cells[stack.top - n + i]'hlt, ?_, ?_⟩
+          · exact Array.getElem?_eq_getElem hlt
+          · rw [List.getElem?_append_left (by simpa using hin)]
+            rw [List.getElem?_replicate]
+            simp [hin, tagAgrees]
+        · have hge : n ≤ i := Nat.le_of_not_gt hin
+          let j := i - n
+          have hj : j < ctx.length := by
+            have hi_len : i < n + ctx.length := by
+              simpa [List.length_replicate, List.length_append] using hi
+            omega
+          obtain ⟨cell, hcell, htag⟩ := stack.h_tags j hj
+          have hindex : stack.top - n + i = stack.top + j := by omega
+          refine ⟨cell, ?_, ?_⟩
+          · rw [hindex]
+            exact hcell
+          · have hctx : (List.replicate n ValueTag.undefined ++ ctx)[i]? = ctx[j]? := by
+              rw [List.getElem?_append_right (by simpa using hge)]
+              rw [List.length_replicate]
+            rw [hctx]
+            exact htag
+    }
+  else
+    RuntimeStack.append (RuntimeStack.undefinedStack n) stack
 
 end CheckedLang

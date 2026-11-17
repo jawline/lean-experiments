@@ -13,20 +13,20 @@ open BaseLang
 
 namespace CheckedLang
 
-public def Value.default : (tag : ValueTag) → tag ≠ .empty → Value tag
-  | .empty, h => (h rfl).elim
+public def Value.default : (tag : ValueTag) → tag ≠ .undefined → Value tag
+  | .undefined, h => (h rfl).elim
   | .unit, _ => .unitVal
   | .i32, _ => .i32Val 0
   | .f32, _ => .f32Val 0
   | .bool, _ => .boolVal false
 
-public theorem binOp_resultTag_ne_empty {op : BinOp} {tag : ValueTag}
+public theorem binOp_resultTag_ne_undefined {op : BinOp} {tag : ValueTag}
     (h : op.is_legal_operation_for_type tag = true) :
-    op.resultTag tag ≠ .empty := by
+    op.resultTag tag ≠ .undefined := by
   cases op with
   | arithmeticBinOp aop =>
       cases tag with
-      | empty =>
+      | undefined =>
           simp [BinOp.is_legal_operation_for_type,
             ArithmeticBinOp.is_legal_operation_for_type] at h
       | unit => simp [BinOp.resultTag]
@@ -48,16 +48,16 @@ mutual
         (h : op.is_legal_operation_for_type tag = true) :
         CheckedExpr symbols ctx (op.resultTag tag) ctx2
     | allocate {ctx : StackCtx} (n : Nat) :
-        CheckedExpr symbols ctx .unit (List.replicate n .empty ++ ctx)
+        CheckedExpr symbols ctx .unit (List.replicate n .undefined ++ ctx)
     | deallocate {ctx : StackCtx} (n : Nat) (h : n ≤ ctx.length) :
         CheckedExpr symbols ctx .unit (ctx.drop n)
     | get {ctx : StackCtx} {tag : ValueTag} (n : Nat)
-        (h : listGet? ctx n = some tag) (hne : tag ≠ .empty) :
+        (h : ctx[n]? = some tag) (hne : tag ≠ .undefined) :
         CheckedExpr symbols ctx tag ctx
-    | set {ctx ctx1 ctx2 : StackCtx} {tag : ValueTag} (n : Nat)
+    | set {ctx ctx1 : StackCtx} {tag : ValueTag} (n : Nat)
         (e : CheckedExpr symbols ctx tag ctx1)
-        (h : listSet? ctx1 n tag = some ctx2) :
-        CheckedExpr symbols ctx .unit ctx2
+        (hn : n < ctx1.length) :
+        CheckedExpr symbols ctx .unit (ctx1.set n tag)
     | branch {ctx ctx1 ctx2 : StackCtx} {tag : ValueTag}
         (cmp : CheckedExpr symbols ctx .bool ctx1)
         (lhs : CheckedExpr symbols ctx1 tag ctx2)
@@ -65,7 +65,7 @@ mutual
         CheckedExpr symbols ctx tag ctx2
     | call {ctx ctx' : StackCtx} (function : FunctionReference symbols)
         (arguments : CheckedArgs symbols ctx (symbols.get function.function_slot).2.inputs ctx')
-        (hout : (symbols.get function.function_slot).2.output ≠ .empty) :
+        (hout : (symbols.get function.function_slot).2.output ≠ .undefined) :
         CheckedExpr symbols ctx (symbols.get function.function_slot).2.output ctx'
 
   public inductive CheckedArgs (symbols : EnvironmentSymbols) :
@@ -86,7 +86,7 @@ public theorem CheckedExpr.nonemptyTag {symbols : EnvironmentSymbols}
     {ctx : StackCtx} {tag : ValueTag} {ctx' : StackCtx} :
     CheckedExpr symbols ctx tag ctx' → Nonempty (Value tag)
   | .atom val => ⟨val⟩
-  | .binOp op _ _ h => ⟨Value.default _ (binOp_resultTag_ne_empty h)⟩
+  | .binOp op _ _ h => ⟨Value.default _ (binOp_resultTag_ne_undefined h)⟩
   | .allocate _ => ⟨.unitVal⟩
   | .deallocate _ _ => ⟨.unitVal⟩
   | .get _ _ hne => ⟨Value.default _ hne⟩
@@ -115,25 +115,26 @@ public def typecheckWith (symbols : EnvironmentSymbols) (ctx : StackCtx) :
     Expr → Except String (TypedExpr symbols ctx)
   | .atom (tag := tag) val => Except.ok ⟨tag, ctx, .atom val⟩
   | .allocate n =>
-      Except.ok ⟨.unit, List.replicate n .empty ++ ctx, .allocate n⟩
+      Except.ok ⟨.unit, List.replicate n .undefined ++ ctx, .allocate n⟩
   | .deallocate n =>
       if h : n ≤ ctx.length then
         Except.ok ⟨.unit, ctx.drop n, .deallocate n h⟩
       else
         Except.error "Deallocate exceeds the current frame size"
   | .get n =>
-      match h : listGet? ctx n with
+      match h : ctx[n]? with
       | none => Except.error "Get index is out of bounds"
       | some tag =>
-          if hne : tag = .empty then
-            Except.error "Get on an empty cell"
+          if hne : tag = .undefined then
+            Except.error "Get on an undefined cell"
           else
             Except.ok ⟨tag, ctx, .get n h hne⟩
   | .set n e => do
       let eT ← typecheckWith symbols ctx e
-      match h : listSet? eT.outputCtx n eT.tag with
-      | none => Except.error "Set index is out of bounds"
-      | some ctx' => Except.ok ⟨.unit, ctx', .set n eT.expr h⟩
+      if hn : n < eT.outputCtx.length then
+        Except.ok ⟨.unit, eT.outputCtx.set n eT.tag, .set n eT.expr hn⟩
+      else
+        Except.error "Set index is out of bounds"
   | .binOp op lhs rhs => do
       let lhsT ← typecheckWith symbols ctx lhs
       let rhsT ← typecheckWith symbols lhsT.outputCtx rhs
@@ -170,7 +171,7 @@ public def typecheckWith (symbols : EnvironmentSymbols) (ctx : StackCtx) :
               h ▸ argT.expr
             return ⟨ctx', .cons argExpr rest⟩
       let ⟨ctx', checkedArgs⟩ ← go arguments sig.inputs ctx
-      let ⟨hout⟩ ← ensure (sig.output ≠ .empty) "Function output type cannot be empty"
+      let ⟨hout⟩ ← ensure (sig.output ≠ .undefined) "Function output type cannot be undefined"
       let ref : FunctionReference symbols :=
         { debug_name := functionName, function_slot := slot }
       return ⟨sig.output, ctx', .call ref checkedArgs hout⟩
@@ -286,10 +287,10 @@ mutual
     | .deallocate n h, stack => (.unitVal, RuntimeStack.deallocate stack n h)
     | .get (tag := tag) n h hne, stack =>
         (RuntimeStack.get stack n tag h hne, stack)
-    | .set (ctx2 := ctx2) (tag := tag) n e hset, stack =>
+    | .set (tag := tag) n e hn, stack =>
         haveI : Nonempty (Value tag) := CheckedExpr.nonemptyTag e
         let (v, stack1) := evalChecked env e stack
-        (.unitVal, RuntimeStack.set stack1 n tag v ctx2 hset)
+        (.unitVal, RuntimeStack.set stack1 n tag v hn)
     | .branch (tag := tag) cmp lhs rhs, stack =>
         haveI : Nonempty (Value tag) := CheckedExpr.nonemptyTag lhs
         haveI : Nonempty (Value .bool) := ⟨.boolVal false⟩
